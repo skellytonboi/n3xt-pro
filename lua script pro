@@ -367,7 +367,7 @@ local function makeNoclipSystem(ST_ref,key)
     end))
 end
 
--- ── God mode helper ───────────────────────────────────────────────────
+-- ── God mode helper (instant hook) ────────────────────────────────────
 local function makeGodSystem(ST_ref,key)
     local godHumanoid=nil
     local godConns={}
@@ -377,8 +377,12 @@ local function makeGodSystem(ST_ref,key)
         godConns={};godHumanoid=hm
         pcall(function() hm:SetStateEnabled(Enum.HumanoidStateType.Dead,false) end)
         hm.MaxHealth=1e9;hm.Health=1e9
-        table.insert(godConns,hm.HealthChanged:Connect(function(v) if v<hm.MaxHealth and v>0 then pcall(function() hm.Health=hm.MaxHealth end) end end))
-        table.insert(godConns,hm.Died:Connect(function() pcall(function() hm.Health=hm.MaxHealth end) end))
+        table.insert(godConns,hm.HealthChanged:Connect(function(v)
+            if v<hm.MaxHealth and v>0 then pcall(function() hm.Health=hm.MaxHealth end) end
+        end))
+        table.insert(godConns,hm.Died:Connect(function()
+            pcall(function() hm.Health=hm.MaxHealth end)
+        end))
     end
     local function setGod(on)
         if not on then
@@ -391,7 +395,10 @@ local function makeGodSystem(ST_ref,key)
         local char=LP.Character;local hm=char and char:FindFirstChildOfClass("Humanoid")
         if hm then hookGod(hm) end
     end
-    reg(LP.CharacterAdded:Connect(function(char) local hm=char:WaitForChild("Humanoid",3);if ST_ref[key] and hm then hookGod(hm) end end))
+    reg(LP.CharacterAdded:Connect(function(char)
+        local hm=char:WaitForChild("Humanoid",3)
+        if ST_ref[key] and hm then hookGod(hm) end
+    end))
     reg(RunService.Heartbeat:Connect(function()
         if not ST_ref[key] then return end
         local char=LP.Character;local hm=char and char:FindFirstChildOfClass("Humanoid")
@@ -401,7 +408,7 @@ local function makeGodSystem(ST_ref,key)
     return setGod
 end
 
--- ── Fly helper (Option B) ─────────────────────────────────────────────
+-- ── Fly helper (WASD + pitch) ─────────────────────────────────────────
 local function makeFlySystem(ST_ref,key,speedKey)
     local flyBV,flyBG
     local function rebuildFly()
@@ -1061,8 +1068,7 @@ end
 local function LaunchTSB()
     local ST={
         espOn=true, espHP=true,
-        auraOn=false, auraRadius=20, auraAccum=0,
-        autoFarm=false, farmAccum=0,
+        autoTPBehind=false, tpAccum=0,
         aimOn=false, aimFOV=250, aimStr=0.20, showFOV=true,
         godMode=false,
         speedOn=false, speed=40,
@@ -1152,40 +1158,22 @@ local function LaunchTSB()
     end))
 
     reg(RunService.Heartbeat:Connect(function(dt)
-        if not ST.auraOn then return end
-        ST.auraAccum=ST.auraAccum+dt; if ST.auraAccum<0.2 then return end; ST.auraAccum=0
+        if not ST.autoTPBehind then return end
+        ST.tpAccum=ST.tpAccum+dt; if ST.tpAccum<0.4 then return end; ST.tpAccum=0
         local char=LP.Character; local hrp=char and char:FindFirstChild("HumanoidRootPart"); if not hrp then return end
+        local nearest,nearRoot=nil,nil; local nearDist=math.huge
         for _,p in ipairs(Players:GetPlayers()) do
             if p~=LP and p.Character then
                 local hm=p.Character:FindFirstChildOfClass("Humanoid")
                 local root=p.Character:FindFirstChild("HumanoidRootPart")
                 if hm and root and hm.Health>0 then
                     local d=(root.Position-hrp.Position).Magnitude
-                    if d<=ST.auraRadius then pcall(function() hm:TakeDamage(hm.MaxHealth) end) end
-                end
-            end
-        end
-    end))
-
-    reg(RunService.Heartbeat:Connect(function(dt)
-        if not ST.autoFarm then return end
-        ST.farmAccum=ST.farmAccum+dt; if ST.farmAccum<0.4 then return end; ST.farmAccum=0
-        local char=LP.Character; local hrp=char and char:FindFirstChild("HumanoidRootPart")
-        local myHM=char and char:FindFirstChildOfClass("Humanoid"); if not(hrp and myHM) then return end
-        local nearest,nearRoot,nearHM=nil,nil,nil; local nearDist=math.huge
-        for _,p in ipairs(Players:GetPlayers()) do
-            if p~=LP and p.Character then
-                local hm=p.Character:FindFirstChildOfClass("Humanoid")
-                local root=p.Character:FindFirstChild("HumanoidRootPart")
-                if hm and root and hm.Health>0 then
-                    local d=(root.Position-hrp.Position).Magnitude
-                    if d<nearDist then nearDist=d; nearest=p; nearRoot=root; nearHM=hm end
+                    if d<nearDist then nearDist=d; nearest=p; nearRoot=root end
                 end
             end
         end
         if nearest and nearRoot then
-            hrp.CFrame=nearRoot.CFrame+Vector3.new(0,3,0)
-            pcall(function() nearHM:TakeDamage(nearHM.MaxHealth) end)
+            hrp.CFrame = nearRoot.CFrame * CFrame.new(0,2,-4)
         end
     end))
 
@@ -1220,11 +1208,10 @@ local function LaunchTSB()
     local mp=pages["Main"]; local o=0
     local dcC=mkCard(mp,o+1,44);o=o+1; dcC.BackgroundColor3=Color3.fromRGB(88,101,242)
     local dcB=Instance.new("TextButton",dcC); dcB.Size=UDim2.fromScale(1,1); dcB.BackgroundTransparency=1; dcB.Text="💬  Copy Discord Invite"; dcB.TextColor3=Color3.fromRGB(255,255,255); dcB.Font=Enum.Font.GothamBold; dcB.TextSize=14; dcB.MouseButton1Click:Connect(function() if setclipboard then setclipboard("discord.gg/n3xthub") end; Notif("N3xt","Copied!") end)
-    mkNote(mp,"⚠ Damage remotes are server-sided — TakeDamage is client-only",o+1,Color3.fromRGB(230,210,100)); o=o+1
+    mkNote(mp,"⚠ TSB damage is server-sided. This hub gives you positioning and information — you fight with real moves.",o+1,Color3.fromRGB(230,210,100)); o=o+1
     mkSec(mp,"🎯 Quick Toggles",o+1); o=o+1
     mkTog(mp,"Player ESP","Highlight enemies with HP",o+1,function() return ST.espOn end,function(v) ST.espOn=v end); o=o+1
-    mkTog(mp,"Auto Farm","Teleport to nearest player and damage",o+1,function() return ST.autoFarm end,function(v) ST.autoFarm=v end); o=o+1
-    mkTog(mp,"Hit Aura","Damage all players within radius",o+1,function() return ST.auraOn end,function(v) ST.auraOn=v end); o=o+1
+    mkTog(mp,"Auto-TP Behind","Teleports you behind nearest enemy every 0.4s",o+1,function() return ST.autoTPBehind end,function(v) ST.autoTPBehind=v end); o=o+1
     mkTog(mp,"God Mode","Locks HP + intercepts death",o+1,function() return ST.godMode end,function(v) ST.godMode=v; setGod(v) end); o=o+1
     mkTog(mp,"Anti-AFK","Prevent kick",o+1,function() return ST.antiAFK end,function(v) ST.antiAFK=v end); o=o+1
 
@@ -1239,11 +1226,8 @@ local function LaunchTSB()
     mkTog(cp,"Show FOV Circle","Draw aim radius",o+1,function() return ST.showFOV end,function(v) ST.showFOV=v end); o=o+1
     mkSld(cp,"FOV Radius",o+1,30,500,250,function(v) ST.aimFOV=v; if fovObj then fovObj.Radius=v end end); o=o+1
     mkSld(cp,"Strength",o+1,1,80,20,function(v) ST.aimStr=v/100 end); o=o+1
-    mkSec(cp,"💥 Hit Aura",o+1); o=o+1
-    mkTog(cp,"Enable Hit Aura","Damage all players in radius every 0.2s (client TakeDamage)",o+1,function() return ST.auraOn end,function(v) ST.auraOn=v end); o=o+1
-    mkSld(cp,"Aura Radius",o+1,5,100,20,function(v) ST.auraRadius=v end); o=o+1
-    mkSec(cp,"⚙ Auto Farm",o+1); o=o+1
-    mkTog(cp,"Auto Farm","Teleport + TakeDamage nearest enemy every 0.4s",o+1,function() return ST.autoFarm end,function(v) ST.autoFarm=v end); o=o+1
+    mkSec(cp,"⚙ Auto Positioning",o+1); o=o+1
+    mkTog(cp,"Auto-TP Behind","Teleport behind nearest enemy",o+1,function() return ST.autoTPBehind end,function(v) ST.autoTPBehind=v end); o=o+1
     mkSec(cp,"🛡 Defense",o+1); o=o+1
     mkTog(cp,"God Mode","Locks HP + intercepts death state",o+1,function() return ST.godMode end,function(v) ST.godMode=v; setGod(v) end); o=o+1
 
@@ -1273,7 +1257,7 @@ local function LaunchTSB()
     mkSec(mip,"⚙ Utilities",o+1); o=o+1
     mkTog(mip,"Anti-AFK","Prevent kick",o+1,function() return ST.antiAFK end,function(v) ST.antiAFK=v end); o=o+1
     mkAction(mip,"Infinite Yield","Loads admin command script",o+1,"🎯",function() if not(typeof(loadstring)=="function") then return end; task.spawn(function() pcall(function() loadstring(game:HttpGet("https://raw.githubusercontent.com/EdgeIY/infiniteyield/main/source.lua"))() end) end) end); o=o+1
-    mkAction(mip,"Dump Workspace to F9","Debug helper",o+1,"🔎",function() dumpWorkspace({"Players","Map","Spawns","Characters"}) end); o=o+1
+    mkAction(mip,"Dump Workspace to F9","Debug helper",o+1,"🔎",function() dumpWorkspace({"Map","Arena","Characters","Spawns"}) end); o=o+1
 
     mkSettingsPage(pages["Settings"],win)
     Notif("N3xt","Strongest Battleground Hub loaded ✓")
@@ -1285,14 +1269,13 @@ end
 local function LaunchSlapBattles()
     local ST={
         espOn=true,
-        slapAuraOn=false, slapRadius=25, slapAccum=0,
         autoSlap=false, autoSlapAccum=0,
-        antiKnockback=false, antiKBAccum=0,
+        noCooldown=false,
+        antiKnockback=false,
         speedOn=false, speed=50,
         infJump=false, noclip=false, fly=false, flySpeed=80,
         antiAFK=false,
         selectedPlayer=nil, playerList={},
-        slapForce=200,
     }
 
     local espHL={}; local espT=0
@@ -1319,46 +1302,49 @@ local function LaunchSlapBattles()
     end))
     reg(Players.PlayerRemoving:Connect(function(p) destroyESPKey("pl_"..p.Name) end))
 
-    local SLAP_REMOTES={"Slap","Hit","Damage","Attack","Strike","Punch","KillPlayer","ApplyDamage","DamagePlayer"}
-    local function findSlapRemotes()
-        local found={}
-        local function scan(root)
-            for _,obj in ipairs(root:GetDescendants()) do
-                if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
-                    local nm=obj.Name:lower()
-                    for _,kw in ipairs(SLAP_REMOTES) do if nm:find(kw:lower(),1,true) then table.insert(found,obj); break end end
-                end
-            end
-        end
-        scan(game:GetService("ReplicatedStorage")); scan(workspace); return found
-    end
-    local slapRemotes=nil
-
     reg(RunService.Heartbeat:Connect(function(dt)
-        if not ST.slapAuraOn then return end
-        ST.slapAccum=ST.slapAccum+dt; if ST.slapAccum<0.15 then return end; ST.slapAccum=0
+        if not ST.autoSlap then return end
+        ST.autoSlapAccum=ST.autoSlapAccum+dt; if ST.autoSlapAccum<0.3 then return end; ST.autoSlapAccum=0
         local char=LP.Character; local hrp=char and char:FindFirstChild("HumanoidRootPart"); if not hrp then return end
-        if not slapRemotes then slapRemotes=findSlapRemotes() end
+        local nearest,nearRoot=nil,nil; local nearDist=math.huge
         for _,p in ipairs(Players:GetPlayers()) do
             if p~=LP and p.Character then
                 local hm=p.Character:FindFirstChildOfClass("Humanoid")
                 local root=p.Character:FindFirstChild("HumanoidRootPart")
                 if hm and root and hm.Health>0 then
                     local d=(root.Position-hrp.Position).Magnitude
-                    if d<=ST.slapRadius then
-                        pcall(function() hm:TakeDamage(hm.MaxHealth) end)
-                        pcall(function()
-                            local bv=Instance.new("BodyVelocity")
-                            local dir=(root.Position-hrp.Position).Unit
-                            bv.Velocity=Vector3.new(dir.X*ST.slapForce,ST.slapForce*0.6,dir.Z*ST.slapForce)
-                            bv.MaxForce=Vector3.new(1e5,1e5,1e5); bv.P=5000
-                            bv.Parent=root; game:GetService("Debris"):AddItem(bv,0.25)
-                        end)
-                        for _,rem in ipairs(slapRemotes) do
-                            pcall(function()
-                                if rem:IsA("RemoteEvent") then rem:FireServer(p,hm,root)
-                                else rem:InvokeServer(p,hm,root) end
-                            end)
+                    if d<nearDist then nearDist=d; nearest=p; nearRoot=root end
+                end
+            end
+        end
+        if nearest and nearRoot then
+            hrp.CFrame = nearRoot.CFrame * CFrame.new(0,2,-4)
+            local tool = char:FindFirstChildOfClass("Tool")
+            if tool then pcall(function() tool:Activate() end) end
+        end
+    end))
+
+    reg(RunService.Heartbeat:Connect(function()
+        if not ST.noCooldown then return end
+        local char=LP.Character; if not char then return end
+        local tool = char:FindFirstChildOfClass("Tool")
+        if tool then
+            for _,v in ipairs(tool:GetDescendants()) do
+                if v:IsA("NumberValue") or v:IsA("IntValue") then
+                    local nm = v.Name:lower()
+                    if nm:find("cool",1,true) or nm:find("cd",1,true)
+                       or nm:find("charge",1,true) or nm:find("delay",1,true) then
+                        pcall(function() v.Value = 0 end)
+                    end
+                end
+            end
+            local parent = tool.Parent
+            if parent then
+                for _,v in ipairs(parent:GetDescendants()) do
+                    if v:IsA("NumberValue") or v:IsA("IntValue") then
+                        local nm = v.Name:lower()
+                        if nm:find("cool",1,true) or nm:find("cd",1,true) then
+                            pcall(function() v.Value = 0 end)
                         end
                     end
                 end
@@ -1366,41 +1352,15 @@ local function LaunchSlapBattles()
         end
     end))
 
-    reg(RunService.Heartbeat:Connect(function(dt)
-        if not ST.autoSlap then return end
-        ST.autoSlapAccum=ST.autoSlapAccum+dt; if ST.autoSlapAccum<0.3 then return end; ST.autoSlapAccum=0
-        local char=LP.Character; local hrp=char and char:FindFirstChild("HumanoidRootPart"); if not hrp then return end
-        local nearest,nearRoot,nearHM=nil,nil,nil; local nearDist=math.huge
-        for _,p in ipairs(Players:GetPlayers()) do
-            if p~=LP and p.Character then
-                local hm=p.Character:FindFirstChildOfClass("Humanoid")
-                local root=p.Character:FindFirstChild("HumanoidRootPart")
-                if hm and root and hm.Health>0 then
-                    local d=(root.Position-hrp.Position).Magnitude
-                    if d<nearDist then nearDist=d; nearest=p; nearRoot=root; nearHM=hm end
-                end
-            end
-        end
-        if nearest and nearRoot then
-            local behind=nearRoot.CFrame*CFrame.new(0,2,-3)
-            hrp.CFrame=behind
-            pcall(function() nearHM:TakeDamage(nearHM.MaxHealth) end)
-            pcall(function()
-                local bv=Instance.new("BodyVelocity")
-                local dir=(nearRoot.Position-hrp.Position).Unit
-                bv.Velocity=Vector3.new(dir.X*ST.slapForce,ST.slapForce*0.8,dir.Z*ST.slapForce)
-                bv.MaxForce=Vector3.new(1e5,1e5,1e5); bv.P=5000
-                bv.Parent=nearRoot; game:GetService("Debris"):AddItem(bv,0.25)
-            end)
-        end
-    end))
-
     local antiKBBV=nil
-    reg(RunService.Heartbeat:Connect(function(dt)
-        ST.antiKBAccum=ST.antiKBAccum+dt; if ST.antiKBAccum<0.1 then return end; ST.antiKBAccum=0
+    reg(RunService.Heartbeat:Connect(function()
         local char=LP.Character; local hrp=char and char:FindFirstChild("HumanoidRootPart")
-        if ST.antiKnockback then
-            if hrp then
+        local hum=char and char:FindFirstChildOfClass("Humanoid")
+        if ST.antiKnockback and hrp and hum then
+            local isMoving = hum.MoveDirection.Magnitude > 0.1
+            if isMoving then
+                if antiKBBV then pcall(function() antiKBBV:Destroy() end); antiKBBV=nil end
+            else
                 if not antiKBBV or not antiKBBV.Parent then
                     antiKBBV=Instance.new("BodyVelocity")
                     antiKBBV.Name="N3xtAntiKB"
@@ -1443,25 +1403,16 @@ local function LaunchSlapBattles()
 
     local function tpToSafePlatform()
         local char=LP.Character; local hrp=char and char:FindFirstChild("HumanoidRootPart"); if not hrp then return end
-        local kw={"platform","spawn","safe","arena","start","base","center","middle","stage"}
-        local best,bestY=nil,-math.huge
-        for _,obj in ipairs(workspace:GetDescendants()) do
-            if obj:IsA("BasePart") and obj.Anchored then
-                local n=obj.Name:lower()
-                local match=false; for _,kw2 in ipairs(kw) do if n:find(kw2,1,true) then match=true; break end end
-                if match and obj.Size.Magnitude>5 and obj.Position.Y>bestY then bestY=obj.Position.Y; best=obj end
+        local arena = workspace:FindFirstChild("Arena")
+        if not arena then Notif("N3xt","No Arena folder"); return end
+        local island = arena:FindFirstChild("default island")
+        if not island then island = arena:GetChildren()[1] end
+        if island then
+            local target = island:IsA("BasePart") and island or (island.PrimaryPart or island:FindFirstChildWhichIsA("BasePart",true))
+            if target then
+                for i=1,3 do hrp.CFrame = target.CFrame + Vector3.new(0,15,0); task.wait(0.3) end
+                Notif("N3xt","TP to "..island.Name)
             end
-        end
-        if best then hrp.CFrame=best.CFrame+Vector3.new(0,5,0); Notif("N3xt","TP to "..best.Name)
-        else
-            local biggest,biggestMag=nil,0
-            for _,obj in ipairs(workspace:GetDescendants()) do
-                if obj:IsA("BasePart") and obj.Anchored and obj.Size.Magnitude>biggestMag and obj.Size.Y<5 then
-                    biggestMag=obj.Size.Magnitude; biggest=obj
-                end
-            end
-            if biggest then hrp.CFrame=biggest.CFrame+Vector3.new(0,5,0); Notif("N3xt","TP to platform")
-            else Notif("N3xt","No platform found") end
         end
     end
 
@@ -1471,12 +1422,12 @@ local function LaunchSlapBattles()
     local mp=pages["Main"]; local o=0
     local dcC=mkCard(mp,o+1,44); o=o+1; dcC.BackgroundColor3=Color3.fromRGB(88,101,242)
     local dcB=Instance.new("TextButton",dcC); dcB.Size=UDim2.fromScale(1,1); dcB.BackgroundTransparency=1; dcB.Text="💬  Copy Discord Invite"; dcB.TextColor3=Color3.fromRGB(255,255,255); dcB.Font=Enum.Font.GothamBold; dcB.TextSize=14; dcB.MouseButton1Click:Connect(function() if setclipboard then setclipboard("discord.gg/n3xthub") end; Notif("N3xt","Copied!") end)
-    mkNote(mp,"⚠ Slap damage is server-sided — knockback is client-only visual",o+1,Color3.fromRGB(230,210,100)); o=o+1
+    mkNote(mp,"⚠ Slap damage is server-sided. Auto-Slap repositions you so your real glove lands.",o+1,Color3.fromRGB(230,210,100)); o=o+1
     mkSec(mp,"🎯 Quick Toggles",o+1); o=o+1
     mkTog(mp,"Player ESP","Highlight players on screen",o+1,function() return ST.espOn end,function(v) ST.espOn=v end); o=o+1
-    mkTog(mp,"Auto Slap","TP behind nearest player and knockback",o+1,function() return ST.autoSlap end,function(v) ST.autoSlap=v end); o=o+1
-    mkTog(mp,"Slap Aura","Knockback all nearby players",o+1,function() return ST.slapAuraOn end,function(v) ST.slapAuraOn=v end); o=o+1
-    mkTog(mp,"Anti-Knockback","Resist incoming slap force",o+1,function() return ST.antiKnockback end,function(v) ST.antiKnockback=v end); o=o+1
+    mkTog(mp,"Auto Slap","TP behind nearest player + fire equipped glove",o+1,function() return ST.autoSlap end,function(v) ST.autoSlap=v end); o=o+1
+    mkTog(mp,"No Slap Cooldown","Force-equipped glove cooldowns to 0",o+1,function() return ST.noCooldown end,function(v) ST.noCooldown=v end); o=o+1
+    mkTog(mp,"Anti-Knockback","Resist incoming shoves when standing still",o+1,function() return ST.antiKnockback end,function(v) ST.antiKnockback=v end); o=o+1
     mkTog(mp,"Anti-AFK","Prevent kick",o+1,function() return ST.antiAFK end,function(v) ST.antiAFK=v end); o=o+1
 
     local vp=pages["Visuals"]; o=0
@@ -1484,14 +1435,11 @@ local function LaunchSlapBattles()
     mkTog(vp,"Player ESP","Highlight all players",o+1,function() return ST.espOn end,function(v) ST.espOn=v end); o=o+1
 
     local cp=pages["Combat"]; o=0
-    mkSec(cp,"👋 Slap Aura",o+1); o=o+1
-    mkTog(cp,"Enable Slap Aura","Knockback players within radius every 0.15s",o+1,function() return ST.slapAuraOn end,function(v) ST.slapAuraOn=v; if v then slapRemotes=nil end end); o=o+1
-    mkSld(cp,"Aura Radius",o+1,5,120,25,function(v) ST.slapRadius=v end); o=o+1
-    mkSld(cp,"Slap Force",o+1,50,800,200,function(v) ST.slapForce=v end); o=o+1
-    mkSec(cp,"⚙ Auto Slap",o+1); o=o+1
-    mkTog(cp,"Auto Slap","TP behind nearest player + knockback every 0.3s",o+1,function() return ST.autoSlap end,function(v) ST.autoSlap=v end); o=o+1
+    mkSec(cp,"👋 Slap Systems",o+1); o=o+1
+    mkTog(cp,"Auto Slap","TP behind nearest target and activate held glove every 0.3s",o+1,function() return ST.autoSlap end,function(v) ST.autoSlap=v end); o=o+1
+    mkTog(cp,"No Slap Cooldown","Sets cooldown values to 0 (may or may not stick if server tracks it)",o+1,function() return ST.noCooldown end,function(v) ST.noCooldown=v end); o=o+1
     mkSec(cp,"🛡 Defense",o+1); o=o+1
-    mkTog(cp,"Anti-Knockback","Counter incoming velocity to stay on platform",o+1,function() return ST.antiKnockback end,function(v) ST.antiKnockback=v end); o=o+1
+    mkTog(cp,"Anti-Knockback","Cancel incoming velocity ONLY while standing still — move freely",o+1,function() return ST.antiKnockback end,function(v) ST.antiKnockback=v end); o=o+1
 
     local mvp=pages["Movement"]; o=0
     mkSec(mvp,"🏃 Movement",o+1); o=o+1
@@ -1503,7 +1451,7 @@ local function LaunchSlapBattles()
     mkSld(mvp,"Fly Speed",o+1,30,300,80,function(v) ST.flySpeed=v end); o=o+1
 
     local tp2=pages["Teleports"]; o=0
-    mkAction(tp2,"TP to Safe Platform","Find and TP to the largest safe arena platform",o+1,"🟩",function() tpToSafePlatform() end); o=o+1
+    mkAction(tp2,"TP to Safe Platform","Teleport to default island in Arena folder",o+1,"🟩",function() tpToSafePlatform() end); o=o+1
     mkSec(tp2,"👤 Player Teleport",o+1); o=o+1
     local plC=mkCard(tp2,o+1,56); o=o+1
     local plTL=Instance.new("TextLabel",plC); plTL.Position=UDim2.fromOffset(14,8); plTL.Size=UDim2.new(0.5,0,0,20); plTL.BackgroundTransparency=1; plTL.Text="Select Player"; plTL.TextColor3=T.TEXT; plTL.Font=Enum.Font.GothamMedium; plTL.TextSize=13; plTL.TextXAlignment=Enum.TextXAlignment.Left
@@ -1520,7 +1468,7 @@ local function LaunchSlapBattles()
     mkSec(mip,"⚙ Utilities",o+1); o=o+1
     mkTog(mip,"Anti-AFK","Prevent kick",o+1,function() return ST.antiAFK end,function(v) ST.antiAFK=v end); o=o+1
     mkAction(mip,"Infinite Yield","Loads admin command script",o+1,"🎯",function() if not(typeof(loadstring)=="function") then return end; task.spawn(function() pcall(function() loadstring(game:HttpGet("https://raw.githubusercontent.com/EdgeIY/infiniteyield/main/source.lua"))() end) end) end); o=o+1
-    mkAction(mip,"Dump Workspace to F9","Debug helper — prints folder structure",o+1,"🔎",function() dumpWorkspace({"Players","Platforms","Spawns","Map","Arena"}) end); o=o+1
+    mkAction(mip,"Dump Workspace to F9","Debug helper — prints folder structure",o+1,"🔎",function() dumpWorkspace({"Arena","Platforms","Spawns","Map","Players"}) end); o=o+1
 
     mkSettingsPage(pages["Settings"],win)
     Notif("N3xt","Slap Battles Hub loaded ✓")
@@ -1530,14 +1478,14 @@ end
 -- BOOT
 -- ═══════════════════════════════════════════════════
 BuildScriptSelector(function(g)
-    if     g.name=="Murder Mystery 2"          then LaunchMM2()
-    elseif g.name=="Arsenal"                   then LaunchArsenal()
-    elseif g.name=="Natural Disaster Survival" then LaunchNDS()
-    elseif g.name=="99 Nights in the Forest"   then Launch99Nights()
-    elseif g.name=="Blox Fruits"               then LaunchBloxFruits()
-    elseif g.name=="Build a Boat For Treasure" then LaunchBuildABoat()
-    elseif g.name=="The Strongest Battleground"then LaunchTSB()
-    elseif g.name=="Slap Battles"              then LaunchSlapBattles()
+    if     g.name=="Murder Mystery 2"           then LaunchMM2()
+    elseif g.name=="Arsenal"                    then LaunchArsenal()
+    elseif g.name=="Natural Disaster Survival"  then LaunchNDS()
+    elseif g.name=="99 Nights in the Forest"    then Launch99Nights()
+    elseif g.name=="Blox Fruits"                then LaunchBloxFruits()
+    elseif g.name=="Build a Boat For Treasure"  then LaunchBuildABoat()
+    elseif g.name=="The Strongest Battleground" then LaunchTSB()
+    elseif g.name=="Slap Battles"               then LaunchSlapBattles()
     else Notif("N3xt",g.name.." — Coming Soon! 🔜") end
 end)
 
